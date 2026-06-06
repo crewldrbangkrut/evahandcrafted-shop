@@ -119,7 +119,7 @@
         inset 3px 3px 6px rgba(255, 105, 180, 0.2),
         0 0 10px rgba(255, 105, 180, 0.2);
     }
-      const GAS_API_URL = "[https://script.google.com/](https://script.google.com/macros/s/AKfycby-fKFoXMKXMTiJCKu9qQ4zwyH7_6TghWPcuIk0C1-g6NHCSnprwuJI0ir678qknVUX/exec)...";
+
     /* Loading Spinner */
     .loader {
       border: 4px solid #FFF0F5;
@@ -147,7 +147,7 @@
     // =========================================================================
     // TEMPEL URL WEB APP GOOGLE APPS SCRIPT ANDA DI SINI
     // =========================================================================
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyCsh-L3gD-M_mK0oBwHl4zP9K-7HqXJ0EubY5rB-iF7Lptz_Kk5wU6vOfV1K8Yf37q/exec"; 
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycby1Vv7XRcqSNxr7UfEFYn6N9heyS5fD19QxK-FGgj8/dev"; 
     // Ganti nilai di atas dengan URL Web App milik Anda yang di-deploy di GAS.
 
     function App() {
@@ -156,6 +156,7 @@
       const [categories, setCategories] = useState([]);
       const [isLoading, setIsLoading] = useState(true);
       const [apiConnected, setApiConnected] = useState(false);
+      const [apiError, setApiError] = useState(''); // State untuk menangkap detail error teknis
 
       // State pencarian & filter navigasi
       const [searchTerm, setSearchTerm] = useState('');
@@ -163,7 +164,7 @@
       const [sortBy, setSortBy] = useState('terkait');
       const [selectedProduct, setSelectedProduct] = useState(null);
       
-      // State autentikasi admin panel (Login lokal melalui validasi GAS API)
+      // State autentikasi admin panel
       const [showAdminPanel, setShowAdminPanel] = useState(false);
       const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
       const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -201,31 +202,60 @@
       });
 
       // ==========================================
+      // FUNGSI DIAGNOSIS FORMAT URL (ANALYZER)
+      // ==========================================
+      const runUrlDiagnosis = (url) => {
+        if (!url || url.trim() === "") {
+          return { valid: false, code: "EMPTY", message: "Variabel GAS_API_URL masih kosong." };
+        }
+        if (url.includes("YOUR_GOOGLE_APPS_SCRIPT_URL_HERE")) {
+          return { valid: false, code: "PLACEHOLDER", message: "Anda masih menggunakan URL template bawaan! Harap ganti dengan URL milik Anda." };
+        }
+        if (!url.startsWith("https://script.google.com/")) {
+          return { valid: false, code: "NOT_GOOGLE", message: "URL tidak valid. Harus dimulai dengan 'https://script.google.com/'" };
+        }
+        if (url.includes("/edit") || url.includes("/d/")) {
+          return { valid: false, code: "EDITOR_LINK", message: "Anda memasukkan link Editor Script/Spreadsheet! Harap lakukan deploy ulang lalu salin link Web App yang berakhiran '/exec'." };
+        }
+        if (!url.includes("/macros/s/") || !url.endsWith("/exec")) {
+          return { valid: false, code: "BAD_FORMAT", message: "Format URL Web App kurang tepat. Pastikan link mengandung '/macros/s/' dan diakhiri dengan '/exec'." };
+        }
+        return { valid: true, code: "OK", message: "Format URL Web App tampak sudah benar!" };
+      };
+
+      const diagnosis = runUrlDiagnosis(GAS_API_URL);
+
+      // ==========================================
       // FETCH DATA AWAL DARI GOOGLE APPS SCRIPT
       // ==========================================
       const loadDatabase = async () => {
-        if (!GAS_API_URL || GAS_API_URL.includes("YOUR_GOOGLE_APPS_SCRIPT_URL_HERE")) {
+        if (!diagnosis.valid) {
           setIsLoading(false);
           setApiConnected(false);
+          setApiError(diagnosis.message);
           return;
         }
 
         setIsLoading(true);
+        setApiError('');
         try {
           // Lakukan pemanggilan GET untuk memuat katalog
           const response = await fetch(GAS_API_URL);
+          if (!response.ok) {
+            throw new Error(`Server merespon dengan status HTTP ${response.status}`);
+          }
           const result = await response.json();
           if (result.status === "success") {
             setProducts(result.products || []);
             setCategories(result.categories || []);
             setApiConnected(true);
           } else {
-            console.error("Gagal memuat database:", result.message);
-            setApiConnected(false);
+            throw new Error(result.message || "Gagal memproses data dari spreadsheet.");
           }
         } catch (error) {
           console.error("Gagal terhubung dengan server GAS API:", error);
           setApiConnected(false);
+          setApiError(error.toString());
         } finally {
           setIsLoading(false);
         }
@@ -249,7 +279,7 @@
         if (typeof lucide !== 'undefined') {
           lucide.createIcons();
         }
-      }, [showAdminPanel, showPasswordModal, selectedProduct, products, categories, loginError, adminNotification, showPasswordText, confirmModal, isLoading, apiConnected]);
+      }, [showAdminPanel, showPasswordModal, selectedProduct, products, categories, loginError, adminNotification, showPasswordText, confirmModal, isLoading, apiConnected, apiError]);
 
       // ==========================================
       // LOGIKA FILTER & SORTING
@@ -566,20 +596,102 @@
               <p className="font-bold text-[#FF69B4] animate-pulse">Menghubungi Google Spreadsheet Database...</p>
             </div>
           ) : !apiConnected ? (
-            // NOTIFIKASI ERROR JIKA URL API BELUM DIPASANG
-            <div className="flex-grow flex items-center justify-center p-6">
-              <div className="clay-card p-8 max-w-lg text-center space-y-4 bg-white">
-                <span className="text-5xl">⚙️</span>
-                <h3 className="text-xl font-bold font-cute text-[#FF69B4]">Katalog Belum Terhubung Database</h3>
-                <p className="text-sm text-neutral-500 leading-relaxed">
-                  Sistem database web app Anda sekarang diubah menggunakan Google Spreadsheet. Silakan buat project Google Apps Script dengan menggunakan berkas <code className="bg-pink-100 text-[#FF69B4] px-1.5 py-0.5 rounded font-mono text-xs">code.gs</code>, kemudian paste URL Web App-nya ke dalam kode berkas ini di variabel <code className="bg-pink-100 text-[#FF69B4] px-1.5 py-0.5 rounded font-mono text-xs">GAS_API_URL</code>.
-                </p>
-                <div className="bg-neutral-50 p-3 rounded-xl border border-neutral-200 text-left text-xs font-mono break-all text-neutral-600">
-                  const GAS_API_URL = "YOUR_GOOGLE_APPS_SCRIPT_URL_HERE";
+            
+            // =========================================================================
+            // DI-UPDATE: LAYAR DIAGNOSIS ERROR INTERAKTIF (SEPERTI PADA image_e497fa.png)
+            // =========================================================================
+            <div className="flex-grow flex items-center justify-center p-4">
+              <div className="clay-card p-6 md:p-8 max-w-2xl w-full space-y-6 bg-white my-8">
+                <div className="flex flex-col items-center text-center space-y-3">
+                  <span className="text-5xl animate-bounce">⚙️</span>
+                  <h3 className="text-2xl font-bold font-cute text-[#FF69B4]">Pusat Diagnosis Koneksi Database</h3>
+                  <p className="text-sm text-neutral-500 max-w-md">
+                    Kami mendeteksi adanya kendala koneksi antara halaman web Anda dengan backend Google Spreadsheet Anda.
+                  </p>
                 </div>
-                <p className="text-xs text-neutral-400">
-                  Untuk panduan pemasangan detail, silakan baca berkas panduan instalasi yang disertakan.
-                </p>
+
+                <div className="border-t-2 border-dashed border-pink-100 pt-4 space-y-4 text-xs md:text-sm">
+                  
+                  {/* Status 1: Format URL Anda */}
+                  <div className="bg-neutral-50 p-4 rounded-xl space-y-2 border border-neutral-100">
+                    <div className="font-bold text-neutral-700 flex items-center gap-2">
+                      <span className="text-neutral-400">🔍</span> URL Saat Ini di Kode:
+                    </div>
+                    <div className="bg-white p-2 rounded border border-neutral-200 font-mono text-neutral-600 break-all text-xs">
+                      {GAS_API_URL}
+                    </div>
+                    
+                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-neutral-100">
+                      <span className="font-bold text-neutral-500">Hasil Analisis URL:</span>
+                      {diagnosis.valid ? (
+                        <span className="text-emerald-500 font-bold flex items-center gap-1">
+                          🟢 Format URL Benar
+                        </span>
+                      ) : (
+                        <span className="text-red-500 font-bold flex items-center gap-1">
+                          🔴 Format URL Salah ({diagnosis.code})
+                        </span>
+                      )}
+                    </div>
+                    {!diagnosis.valid && (
+                      <p className="text-xs text-red-500 bg-red-50 p-2 rounded border border-red-100 mt-1">
+                        <strong>Solusi:</strong> {diagnosis.message}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Status 2: Pesan Error Browser Asli */}
+                  <div className="bg-red-50/50 p-4 rounded-xl border border-red-100 space-y-2">
+                    <div className="font-bold text-red-700 flex items-center gap-2">
+                      <span>⚠️</span> Pesan Error Teknis Sistem:
+                    </div>
+                    <div className="bg-white p-2 rounded border border-red-200 font-mono text-red-500 text-xs break-all">
+                      {apiError || "Tidak ada rincian pesan error browser."}
+                    </div>
+                  </div>
+
+                  {/* Checklist Troubleshooting Cepat */}
+                  <div className="space-y-2.5">
+                    <h4 className="font-bold text-neutral-700">📋 Daftar Periksa Solusi Cepat:</h4>
+                    
+                    <ul className="space-y-2 text-xs text-neutral-600">
+                      <li className="flex items-start gap-2">
+                        <span className="text-pink-500 mt-0.5">✔</span>
+                        <div>
+                          <strong>Apakah Anda sudah mengganti URL?</strong> Pastikan variabel <code className="bg-neutral-100 px-1 py-0.5 rounded font-mono text-pink-600">const GAS_API_URL</code> di baris ke-122 berkas <code className="bg-neutral-100 px-1 py-0.5 rounded font-mono text-neutral-600">index.html</code> telah diganti dengan URL Web App milik Anda.
+                        </div>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-pink-500 mt-0.5">✔</span>
+                        <div>
+                          <strong>Apakah Web App disetel ke Publik?</strong> Di editor Google Apps Script, klik <strong>Deploy &gt; Manage deployments</strong>. Pastikan pengaturan <strong>Who has access</strong> disetel ke <strong>Anyone (Siapa saja)</strong>, bukan "Only myself".
+                        </div>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-pink-500 mt-0.5">✔</span>
+                        <div>
+                          <strong>Sudah memberi izin akses Google?</strong> Apakah saat menempelkan kode di Google Apps Script Anda sudah mengklik tombol **Run** sekali dan menyetujui semua otorisasi (Review Permissions)?
+                        </div>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-pink-500 mt-0.5">✔</span>
+                        <div>
+                          <strong>Setiap ada perubahan kode di GAS wajib redeploy:</strong> Jangan lupa klik <strong>Deploy &gt; Manage deployments &gt; Edit &gt; Version: New Version &gt; Deploy</strong> setiap kali Anda mengedit <code className="bg-neutral-100 px-1 py-0.5 rounded font-mono text-neutral-600">code.gs</code>.
+                        </div>
+                      </li>
+                    </ul>
+                  </div>
+
+                </div>
+
+                <div className="flex gap-2.5 pt-2">
+                  <button 
+                    onClick={() => window.location.reload()}
+                    className="w-full py-3 font-bold clay-btn flex items-center justify-center gap-2"
+                  >
+                    <i data-lucide="refresh-cw" className="w-4 h-4 animate-spin"></i> Coba Hubungkan Kembali
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
@@ -863,7 +975,7 @@
 
                 </div>
               ) : (
-                // KATALOG UTAMA (Shopee Style)
+                // KATALOG UTAMA
                 <div className="space-y-6 animate-fadeIn">
                   
                   {/* HERO BANNER - Soft Pastel Clay Style */}
@@ -1151,7 +1263,7 @@
             </div>
           )}
 
-          {/* MODAL DETAIL PRODUK (POP-UP) */}
+          {/* MODAL DETAIL PRODUK */}
           {selectedProduct && (
             <div 
               className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fadeIn"
@@ -1238,7 +1350,7 @@
                         </a>
                       </div>
 
-                      {/* Tombol Tutup Detail di Bagian Bawah */}
+                      {/* Tombol Tutup Detail */}
                       <button 
                         onClick={() => setSelectedProduct(null)}
                         className="w-full py-2.5 mt-2 font-bold text-xs text-neutral-400 hover:text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded-xl transition-all flex items-center justify-center gap-1.5"
